@@ -1,0 +1,92 @@
+service-sets:
+  server:
+    services:
+      - kafka
+      - postgres
+      - server
+      - mock-services
+      - stubs
+  graphql:
+    includes:
+      - server
+    services:
+      - graphql
+      - redis
+
+init-command: $PWD/init.sh
+shutdown-command: $PWD/shutdown.sh
+
+services:
+  kafka:
+    disabled: false
+    post-stop-script: killall java
+    scripts:
+      zookeeper:
+        workdir: ~/projects/kafka/bin
+        command: $PWD/zookeeper.sh
+        log_file: $PWD/logs/zookeeper.log
+      kafka:
+        wait_for_ports: [2181]
+        workdir: ~/projects/kafka/bin
+        command: $WD/kafka-server-start.sh ../config/server.properties
+        log_file: $PWD/logs/kafka.log
+      topic-create:
+        wait_for_ports: [9092]
+        workdir: ~/projects/kafka/bin
+        command: $PWD/topic_create.sh
+        log_file: $PWD/logs/topic_create.log
+
+  postgres:
+    disabled: false
+    post-stop-script: killall postgres
+    scripts:
+      postgres:
+        command: $PWD/postgres.sh
+        log_file: $PWD/logs/postgres.log
+      db-create:
+        wait_for_ports: [5432]
+        command: database_init postgres db_name changelogs_folder db_user db_password
+        log_file: $PWD/logs/db_create.log
+
+  redis:
+    disabled: false
+    scripts:
+      redis:
+        command: redis-server --save --appendonly no
+        log_file: $PWD/logs/redis.log
+
+  server:
+    disabled: false
+    scripts:
+      server:
+        wait_for_ports: [5432, 9092]
+        wait_until_scripts_are_done: [kafka.topic-create, postgres.db-create]
+        workdir: some_work_dir
+        env_file: $PWD/.env
+        command: $WD/bin/some-service
+        log_file: $PWD/logs/server.log
+
+  graphql:
+    disabled: false
+    scripts:
+      graphql:
+        workdir: some_work_dir
+        env_file: $PWD/.gqlenv
+        command: $WD/bin/some-graphql-service
+        log_file: $PWD/logs/graphql.log
+
+  mock-services:
+    disabled: false
+    scripts:
+      mock-services:
+        workdir: some_work_dir
+        command: $WD/bin/mock-services
+        log_file: $PWD/logs/mock-services.log
+
+  stubs:
+    disabled: false
+    scripts:
+      stubs:
+        workdir: some_work_dir
+        command: $WD/bin/stubs
+        log_file: $PWD/logs/stubs.log
