@@ -1,5 +1,6 @@
 use std::io::{Error, ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
+use std::process::exit;
 use crate::service_manager::ServiceManager;
 
 pub struct WriterWithTCP {
@@ -42,41 +43,41 @@ pub fn run_user_command(command: String, manager: &'static ServiceManager, noexe
     let parts: Vec<&str> = command.split(&[' ', '_']).collect();
     return match parts[0] {
         "up" => if parts.len() == 2 {
-            manager.up(parts[1], noexec, writer)?;
-            Ok(())
+            manager.up(parts[1], noexec, writer)
         } else { Err(build_invalid_command_error()) },
         "down" => if parts.len() == 1 {
-            manager.shutdown(noexec, writer)?;
-            Ok(())
+            manager.shutdown(noexec, writer)
         } else { Err(build_invalid_command_error()) },
         "start" => if parts.len() == 2 {
             if parts[1].contains('.') {
-                manager.start_script(false, parts[1], noexec, writer)?;
+                manager.start_script(false, parts[1], noexec, writer)
             } else {
-                manager.start_service(false, parts[1], noexec, writer)?;
+                manager.start_service(false, parts[1], noexec, writer)
             }
-            Ok(())
         } else { Err(build_invalid_command_error()) },
         "force-start" => if parts.len() == 2 {
             if parts[1].contains('.') {
-                manager.start_script(true, parts[1], noexec, writer)?;
+                manager.start_script(true, parts[1], noexec, writer)
             } else {
-                manager.start_service(true, parts[1], noexec, writer)?;
+                manager.start_service(true, parts[1], noexec, writer)
             }
-            Ok(())
         } else { Err(build_invalid_command_error()) },
         "stop" => if parts.len() == 2 {
             if parts[1].contains('.') {
-                manager.stop_script(parts[1], writer)?;
+                manager.stop_script(parts[1], writer)
             } else {
-                manager.stop_service(parts[1], noexec, writer)?;
+                manager.stop_service(parts[1], noexec, writer)
             }
-            Ok(())
         } else { Err(build_invalid_command_error()) },
         "status" => if parts.len() == 1 {
-            writer.write_string(manager.report_status())?;
-            Ok(())
+            writer.write_string(manager.report_status(None))
+        } else if parts.len() == 2 {
+            writer.write_string(manager.report_status(Some(parts[1])))
         } else { Err(build_invalid_command_error()) },
+        "exit" => {
+            let _ = manager.shutdown(noexec, writer);
+            exit(0);
+        },
         _ => Err(Error::new(ErrorKind::InvalidInput, "unknown command"))
     };
 }

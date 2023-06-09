@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::sync::Mutex;
 use std::thread;
+use std::thread::sleep;
 use std::time::Duration;
 use yaml_rust::Yaml;
 use crate::command_to_run::CommandToRun;
@@ -235,5 +236,16 @@ impl Script {
             _ => "unknown"
         };
         format!("  {}: {}", self.name, status_string)
+    }
+
+    pub fn wait_finish(&self) {
+        let delay = Duration::from_millis(100);
+        loop {
+            let status = self.get_status();
+            if status != SCRIPT_STATUS_RUNNING && status != SCRIPT_STATUS_STARTING {
+                break;
+            }
+            sleep(delay);
+        }
     }
 }

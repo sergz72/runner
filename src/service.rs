@@ -83,6 +83,11 @@ impl Service {
             .collect::<Vec<_>>()
             .join("\n")
     }
+
+    pub fn wait_finish(&self) {
+        self.scripts.iter()
+            .for_each(|(_name, script)|script.wait_finish())
+    }
 }
 
 pub fn build_invalid_script_name_error() -> Error {

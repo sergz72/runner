@@ -1,3 +1,6 @@
+#PWD = runner application working folder
+#WD  = script working folder defined in workdir setting
+
 service-sets:
   server:
     services:

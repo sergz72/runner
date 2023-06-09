@@ -34,6 +34,7 @@ fn run_command(manager: &'static ServiceManager, noexec: bool, mut writer: Write
         }
         Err(e) => println!("Stream read error {}", e.to_string())
     }
+    println!("Stream shutdown");
     writer.shutdown();
 }
 

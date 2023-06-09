@@ -112,11 +112,17 @@ impl Services {
         Err(Error::new(ErrorKind::InvalidData, format!("service does not exists: {}", name)))
     }
 
-    pub fn report_status(&self) -> String {
+    pub fn report_status(&self, service_name: Option<&str>) -> String {
         self.services.iter()
+            .filter(|(name, _service)|service_name == None || service_name.unwrap() == (**name))
             .map(|(name, service)|name.clone() + ":\n" + service.get_status_string().as_str())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    pub fn wait_finish(&self) {
+        self.services.iter()
+            .for_each(|(_name, service)|service.wait_finish())
     }
 }
 
@@ -154,6 +160,8 @@ impl ServiceManager {
     pub fn shutdown(&self, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
         self.stop_all(noexec, writer)?;
         if let Some(cmd) = &self.shutdown_command {
+            writer.write_string(format!("Waiting for all services to be finished..."))?;
+            self.services.wait_finish();
             writer.write_string(format!("Starting shutdown script..."))?;
             cmd.run_sync(noexec)?;
             writer.write_string(format!("Finished shutdown script..."))?;
@@ -190,8 +198,8 @@ impl ServiceManager {
         self.services.stop_script(script_name, writer)
     }
 
-    pub fn report_status(&self) -> String {
-        self.services.report_status()
+    pub fn report_status(&self, service_name: Option<&str>) -> String {
+        self.services.report_status(service_name)
     }
 }
 
