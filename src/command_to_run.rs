@@ -6,7 +6,7 @@ use std::io::{Error, ErrorKind, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::process::{Child, Command, Stdio};
 use std::sync::RwLock;
-use crate::env_file::parse_env_file;
+use env_file::parse_env_file;
 
 pub struct CommandToRun {
     command: String,

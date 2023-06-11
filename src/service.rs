@@ -62,9 +62,9 @@ impl Service {
             script.stop(writer)?;
         }
         if let Some(script) = &self.post_stop_script {
-            writer.write_string(format!("Running post-stop-script for {}", self.name))?;
+            writer.write_string(format!("Running post-stop-script for {}", self.name));
             script.run_sync(noexec)?;
-            writer.write_string(format!("Finished post-stop-script for {}", self.name))?;
+            writer.write_string(format!("Finished post-stop-script for {}", self.name));
         }
         Ok(())
     }

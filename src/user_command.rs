@@ -12,13 +12,13 @@ impl WriterWithTCP {
         WriterWithTCP{ stream }
     }
 
-    pub fn write_string(&mut self, string: String) -> Result<(), Error> {
+    pub fn write_string(&mut self, string: String) {
         println!("{}",  string);
         if let Some(w) = &mut self.stream {
-            writeln!(w, "{}", string)?;
-            w.flush()?;
+            if writeln!(w, "{}", string).is_ok() {
+                let _ = w.flush();
+            }
         }
-        Ok(())
     }
 
     pub fn shutdown(&self) {
@@ -36,7 +36,7 @@ impl WriterWithTCP {
 
 pub fn run_user_command(command: String, manager: &'static ServiceManager, noexec: bool, writer: &mut WriterWithTCP)
     -> Result<(), Error> {
-    writer.write_string(format!("Running command {}", command))?;
+    writer.write_string(format!("Running command {}", command));
     if command.is_empty() {
         return Err(Error::new(ErrorKind::InvalidInput, "empty command"));
     }
@@ -70,9 +70,11 @@ pub fn run_user_command(command: String, manager: &'static ServiceManager, noexe
             }
         } else { Err(build_invalid_command_error()) },
         "status" => if parts.len() == 1 {
-            writer.write_string(manager.report_status(None))
+            writer.write_string(manager.report_status(None));
+            Ok(())
         } else if parts.len() == 2 {
-            writer.write_string(manager.report_status(Some(parts[1])))
+            writer.write_string(manager.report_status(Some(parts[1])));
+            Ok(())
         } else { Err(build_invalid_command_error()) },
         "exit" => {
             let _ = manager.shutdown(noexec, writer);

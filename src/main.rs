@@ -1,6 +1,5 @@
 mod service_manager;
 mod script;
-mod env_file;
 mod service;
 mod user_command;
 mod server;

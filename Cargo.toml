@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 yaml-rust = "0.4"
 ctrlc = { version = "3.0", features = ["termination"] }
-
+env_file = { git = "https://github.com/sergz72/env_file.git" }

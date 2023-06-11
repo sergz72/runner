@@ -86,7 +86,7 @@ impl Script {
         if status == SCRIPT_STATUS_NOT_STARTED || status == SCRIPT_STATUS_INTERRUPTED ||
             status == SCRIPT_STATUS_FINISHED || status == SCRIPT_STATUS_KILLED || status == SCRIPT_STATUS_FAILED {
             self.status.store(SCRIPT_STATUS_STARTING, Ordering::Relaxed);
-            writer.write_string(format!("Starting {}...", self.name))?;
+            writer.write_string(format!("Starting {}...", self.name));
             if forced_start {
                 if noexec {
                     self.run_noexec();
@@ -172,7 +172,7 @@ impl Script {
     }
 
     pub fn stop(&self, writer: &mut WriterWithTCP) -> Result<(), Error> {
-        writer.write_string(format!("Stopping {}...", self.name))?;
+        writer.write_string(format!("Stopping {}...", self.name));
         match self.status.load(Ordering::Relaxed) {
             SCRIPT_STATUS_STARTING | SCRIPT_STATUS_RUNNING => self.interrupt(),
             _ => Ok(())
