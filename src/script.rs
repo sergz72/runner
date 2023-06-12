@@ -30,6 +30,7 @@ pub struct Script {
     command: CommandToRun,
     wait_for_ports: HashSet<u16>,
     wait_until_scripts_are_done: HashSet<String>,
+    delay: Option<Duration>,
     status: AtomicUsize,
     tx: Mutex<Sender<()>>,
     rx: Mutex<Receiver<()>>,
@@ -71,12 +72,14 @@ impl Script {
             return Err(build_invalid_data_error_string(
                                   format!("wait_until_scripts_are_done is invalid in script {}", name)));
         }
+        let delay = items["delay"].as_i64().map(|d|Duration::from_secs(d as u64));
         let (tx, rx): (Sender<()>, Receiver<()>) = channel();
         Ok(Script {
             name,
             command,
             wait_for_ports,
             wait_until_scripts_are_done,
+            delay,
             status: AtomicUsize::new(SCRIPT_STATUS_NOT_STARTED),
             tx: Mutex::new(tx),
             rx: Mutex::new(rx),
@@ -107,6 +110,9 @@ impl Script {
                         if !self.wait_for_scripts(&self.wait_until_scripts_are_done, checker) {
                             return;
                         }
+                        if let Some(d) = self.delay {
+                            sleep(d);
+                        }
                         self.run_noexec();
                     });
                 } else {
@@ -116,6 +122,9 @@ impl Script {
                         }
                         if !self.wait_for_scripts(&self.wait_until_scripts_are_done, checker) {
                             return;
+                        }
+                        if let Some(d) = self.delay {
+                            sleep(d);
                         }
                         self.run_exec();
                     });
@@ -206,7 +215,7 @@ impl Script {
                 self.status.store(SCRIPT_STATUS_INTERRUPTED, Ordering::Relaxed);
                 return false;
             }
-            Err(TryRecvError::Empty) => thread::sleep(duration),
+            Err(TryRecvError::Empty) => sleep(duration),
             Err(TryRecvError::Disconnected) => {
                 self.status.store(SCRIPT_STATUS_INTERRUPTED, Ordering::Relaxed);
                 return false;
