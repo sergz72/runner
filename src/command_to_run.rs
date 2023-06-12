@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::{env, io};
 use std::io::{Error, Write};
 use std::process::{Child, Command, Stdio};
 use env_file::parse_env_file;
+use split_string::split_string;
 use crate::utilities::build_invalid_data_error_str;
 
 pub struct CommandToRun {
@@ -50,28 +51,27 @@ impl CommandToRun {
             return Err(build_invalid_data_error_str("command is empty"));
         }
         let work_dir = match workdir {
-            Some(wd) => Some(CommandToRun::build_file_path(wd, &None)?),
+            Some(wd) => Some(CommandToRun::build_file_path(&wd, &None)?),
             None => None
         };
         let env_variables = match env_file {
-            Some(f) => parse_env_file(CommandToRun::build_file_path(f, &work_dir)?)?,
+            Some(f) => parse_env_file(CommandToRun::build_file_path(&f, &work_dir)?)?,
             None => HashMap::new()
         };
-        let mut parts = command.split(' ');
-        let name = CommandToRun::build_file_path(parts.next().unwrap().to_string(),
-                                                 &work_dir)?;
+        let parts: Vec<String> = split_string(command, HashSet::from(['"']))?
+            .iter()
+            .map(|p|p.result.clone())
+            .collect();
+        let name = CommandToRun::build_file_path(&parts[0], &work_dir)?;
         let log_file_out = match logfile_out {
-            Some(f) => Some(CommandToRun::build_file_path(f, &work_dir)?),
+            Some(f) => Some(CommandToRun::build_file_path(&f, &work_dir)?),
             None => None
         };
         let log_file_err = match logfile_err {
-            Some(f) => Some(CommandToRun::build_file_path(f, &work_dir)?),
+            Some(f) => Some(CommandToRun::build_file_path(&f, &work_dir)?),
             None => None
         };
-        let mut parameters = Vec::new();
-        while let Some(part) = parts.next() {
-            parameters.push(CommandToRun::build_file_path(part.to_string(), &work_dir)?);
-        }
+        let parameters: Vec<String> = parts.iter().skip(1).map(|s|s.clone()).collect();
         Ok(CommandToRun {
             command: name,
             parameters,
@@ -118,7 +118,7 @@ impl CommandToRun {
         command.spawn().map(|r| Some(r))
     }
 
-    pub fn build_file_path(path: String, work_dir: &Option<String>) -> Result<String, Error> {
+    pub fn build_file_path(path: &String, work_dir: &Option<String>) -> Result<String, Error> {
         let cwd = env::current_dir()?;
         let mut result = path.replace("$PWD", &cwd.display().to_string());
         result = result.replace("~", &env::var("HOME").unwrap());
