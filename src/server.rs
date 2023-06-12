@@ -1,5 +1,5 @@
 use std::io::{Error, Read, Write};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use crate::service_manager::ServiceManager;
 use crate::user_command::{run_user_command, WriterWithTCP};
 
@@ -41,7 +41,8 @@ fn run_command(manager: &'static ServiceManager, noexec: bool, mut writer: Write
 pub fn send_command_to_server(command: String) -> Result<(), Error> {
     let mut buffer = [0; 10000];
     println!("Sending command {} to server...", command);
-    let mut stream = TcpStream::connect(("localhost", PORT))?;
+    let mut stream = TcpStream::connect(
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), PORT))?;
     stream.write_all(command.as_bytes())?;
     loop {
         match stream.read(&mut buffer) {
