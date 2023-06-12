@@ -4,16 +4,18 @@ mod service;
 mod user_command;
 mod server;
 mod command_to_run;
+mod utilities;
 
 use std::fs;
 use std::env::args;
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::process::exit;
 use yaml_rust::YamlLoader;
 use ctrlc;
 use crate::server::{send_command_to_server, server_start};
 use crate::service_manager::ServiceManager;
 use crate::user_command::{run_user_commands, WriterWithTCP};
+use crate::utilities::{build_invalid_data_error_str, build_invalid_data_error_string};
 
 static mut MANAGER: Option<ServiceManager> = None;
 
@@ -47,19 +49,13 @@ fn main() -> Result<(), Error> {
     }
     if let Some(config) = config_file {
         let contents = fs::read_to_string(config)?;
-        let docs = match YamlLoader::load_from_str(contents.as_str()) {
-            Ok(d) => d,
-            Err(e) => return Err(Error::new(ErrorKind::InvalidData, e.to_string()))
-        };
+        let docs = YamlLoader::load_from_str(contents.as_str())
+            .map_err(|e|build_invalid_data_error_string(e.to_string()))?;
         let doc = &docs[0];
-        let services = match doc["services"].as_hash() {
-            Some(h) => h,
-            None => return Err(Error::new(ErrorKind::InvalidData, "could not find any service"))
-        };
-        let service_sets = match doc["service-sets"].as_hash() {
-            Some(h) => h,
-            None => return Err(Error::new(ErrorKind::InvalidData, "could not find any service"))
-        };
+        let services = doc["services"].as_hash()
+            .ok_or(build_invalid_data_error_str("could not find any service"))?;
+        let service_sets = doc["service-sets"].as_hash()
+            .ok_or(build_invalid_data_error_str("could not find any service"))?;
         let init_command = if noinit { None } else { doc["init-command"].as_str().map(|s| s.to_string()) };
         let shutdown_command = if noinit { None } else { doc["shutdown-command"].as_str().map(|s| s.to_string()) };
 
@@ -70,14 +66,11 @@ fn main() -> Result<(), Error> {
 
             run_user_commands(commands, MANAGER.as_ref().unwrap(), noexec, WriterWithTCP::new(None));
 
-            let result = if noexec {
+            if noexec {
                 ctrlc::set_handler(|| {shutdown(true, WriterWithTCP::new(None))})
             } else {
                 ctrlc::set_handler(|| {shutdown(false, WriterWithTCP::new(None))})
-            };
-            if let Err(e) = result {
-                return Err(Error::new(ErrorKind::Other, e.to_string()));
-            }
+            }.map_err(|e|build_invalid_data_error_string(e.to_string()))?;
 
             return server_start(MANAGER.as_ref().unwrap(), noexec);
         }

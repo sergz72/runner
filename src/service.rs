@@ -4,6 +4,7 @@ use yaml_rust::Yaml;
 use crate::command_to_run::CommandToRun;
 use crate::script::{Script, SCRIPT_STATUS_NOT_STARTED, ScriptChecker};
 use crate::user_command::WriterWithTCP;
+use crate::utilities::build_invalid_data_error_string;
 
 pub struct Service {
     name: String,
@@ -19,7 +20,8 @@ impl Service {
                 return Err(build_service_has_no_scripts_error(&service_name));
             }
             let post_stop_script = match service["post-stop-script"].as_str() {
-                Some(s) => Some(CommandToRun::new(s.to_string(), None, None, None)?),
+                Some(s) => Some(CommandToRun::new(s.to_string(), None,
+                                                  None, None, None)?),
                 None => None
             };
             let mut result = HashMap::new();
@@ -95,5 +97,5 @@ pub fn build_invalid_script_name_error() -> Error {
 }
 
 fn build_service_has_no_scripts_error(service_name: &String) -> Error {
-    Error::new(ErrorKind::InvalidData, format!("service {} has no scripts", service_name))
+    build_invalid_data_error_string(format!("service {} has no scripts", service_name))
 }

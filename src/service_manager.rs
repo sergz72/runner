@@ -5,6 +5,7 @@ use crate::command_to_run::CommandToRun;
 use crate::script::{SCRIPT_STATUS_NOT_STARTED, ScriptChecker};
 use crate::service::{build_invalid_script_name_error, Service};
 use crate::user_command::WriterWithTCP;
+use crate::utilities::{build_invalid_data_error_str, build_invalid_data_error_string};
 
 pub struct Services {
     services: HashMap<String, Service>,
@@ -109,7 +110,7 @@ impl Services {
         if self.services.contains_key(name) {
             return Ok(());
         }
-        Err(Error::new(ErrorKind::InvalidData, format!("service does not exists: {}", name)))
+        Err(build_invalid_data_error_string(format!("service does not exists: {}", name)))
     }
 
     pub fn report_status(&self, service_name: Option<&str>) -> String {
@@ -131,11 +132,11 @@ impl ServiceManager {
                shutdown_cmd: Option<String>, noexec: bool) -> Result<ServiceManager, Error> {
         let services = Services::new(services)?;
         let init_command = match init_cmd {
-            Some(cmd) => Some(CommandToRun::new(cmd, None, None,None)?),
+            Some(cmd) => Some(CommandToRun::new(cmd, None, None, None,None)?),
             None => None
         };
         let shutdown_command = match shutdown_cmd {
-            Some(cmd) => Some(CommandToRun::new(cmd, None, None,None)?),
+            Some(cmd) => Some(CommandToRun::new(cmd, None, None, None,None)?),
             None => None
         };
         let manager = ServiceManager {
@@ -170,10 +171,9 @@ impl ServiceManager {
     }
 
     pub fn up(&'static self, service_set_name: &str, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
-        if let Some(services) = self.service_sets.get(service_set_name) {
-            return self.services.start_all(services, noexec, writer);
-        }
-        Err(Error::new(ErrorKind::InvalidInput, "invalid service set name"))
+        let services = self.service_sets.get(service_set_name)
+            .ok_or(Error::new(ErrorKind::InvalidInput, "invalid service set name"))?;
+        self.services.start_all(services, noexec, writer)
     }
 
     pub fn stop_all(&self, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
@@ -209,30 +209,26 @@ fn build_service_sets(service_sets: &Hash, service_list: &Services) -> Result<Ha
         let mut services: HashSet<String> = HashSet::new();
         if let Some(includes) = service_set["includes"].as_vec() {
             if includes.is_empty() {
-                return Err(Error::new(ErrorKind::InvalidData, "empty include directive"));
+                return Err(build_invalid_data_error_str("empty include directive"));
             }
             for include in includes {
-                if let Some(another) = result.get(include.as_str().unwrap()) {
-                    for item in another {
-                        service_list.check_service_name(item)?;
-                        services.insert(item.clone());
-                    }
-                } else {
-                    return Err(Error::new(ErrorKind::InvalidData, "invalid include service name"));
+                let another = result.get(include.as_str().unwrap())
+                    .ok_or(build_invalid_data_error_str("invalid include service name"))?;
+                for item in another {
+                    service_list.check_service_name(item)?;
+                    services.insert(item.clone());
                 }
             }
         }
-        if let Some(list) = service_set["services"].as_vec() {
-            if list.is_empty() {
-                return Err(Error::new(ErrorKind::InvalidData, "empty services directive"));
-            }
-            for item in list {
-                let name = item.as_str().unwrap().to_string();
-                service_list.check_service_name(&name)?;
-                services.insert(name);
-            }
-        } else {
-            return Err(Error::new(ErrorKind::InvalidData, "invalid services directive"));
+        let list = service_set["services"].as_vec()
+            .ok_or(build_invalid_data_error_str("invalid services directive"))?;
+        if list.is_empty() {
+            return Err(build_invalid_data_error_str("empty services directive"));
+        }
+        for item in list {
+            let name = item.as_str().unwrap().to_string();
+            service_list.check_service_name(&name)?;
+            services.insert(name);
         }
         result.insert(name.as_str().unwrap().to_string(), services);
     }

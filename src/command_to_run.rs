@@ -2,19 +2,18 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::{env, io};
-use std::io::{Error, ErrorKind, Write};
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::io::{Error, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::RwLock;
 use env_file::parse_env_file;
+use crate::utilities::build_invalid_data_error_str;
 
 pub struct CommandToRun {
     command: String,
     parameters: Vec<String>,
-    log_file: Option<String>,
+    log_file_out: Option<String>,
+    log_file_err: Option<String>,
     work_dir: Option<String>,
     env_variables: HashMap<String, String>,
-    file: RwLock<Option<File>>,
 }
 
 fn format_vector(vector: &Vec<String>) -> String {
@@ -34,20 +33,21 @@ fn format_map(map: &HashMap<String, String>) -> String {
 
 impl Display for CommandToRun {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandToRun {} parameters={} log_file={} work_dir={} env_variables={}",
+        write!(f, "CommandToRun {} parameters={} log_file_out={} log_file_err={} work_dir={} env_variables={}",
                self.command,
                format_vector(&self.parameters),
-               if self.log_file.is_none() { "None" } else { self.log_file.as_ref().unwrap().as_str() },
+               if self.log_file_out.is_none() { "None" } else { self.log_file_out.as_ref().unwrap().as_str() },
+               if self.log_file_err.is_none() { "None" } else { self.log_file_err.as_ref().unwrap().as_str() },
                if self.work_dir.is_none() { "None" } else { self.work_dir.as_ref().unwrap().as_str() },
                format_map(&self.env_variables))
     }
 }
 
 impl CommandToRun {
-    pub fn new(command: String, logfile: Option<String>, workdir: Option<String>,
+    pub fn new(command: String, logfile_out: Option<String>, logfile_err: Option<String>, workdir: Option<String>,
                env_file: Option<String>) -> Result<CommandToRun, Error> {
         if command.is_empty() {
-            return Err(Error::new(ErrorKind::InvalidData, "command is empty"));
+            return Err(build_invalid_data_error_str("command is empty"));
         }
         let work_dir = match workdir {
             Some(wd) => Some(CommandToRun::build_file_path(wd, &None)?),
@@ -60,7 +60,11 @@ impl CommandToRun {
         let mut parts = command.split(' ');
         let name = CommandToRun::build_file_path(parts.next().unwrap().to_string(),
                                                  &work_dir)?;
-        let log_file = match logfile {
+        let log_file_out = match logfile_out {
+            Some(f) => Some(CommandToRun::build_file_path(f, &work_dir)?),
+            None => None
+        };
+        let log_file_err = match logfile_err {
             Some(f) => Some(CommandToRun::build_file_path(f, &work_dir)?),
             None => None
         };
@@ -71,10 +75,10 @@ impl CommandToRun {
         Ok(CommandToRun {
             command: name,
             parameters,
-            log_file,
+            log_file_out,
+            log_file_err,
             work_dir,
             env_variables,
-            file: RwLock::new(None),
         })
     }
 
@@ -85,17 +89,13 @@ impl CommandToRun {
         if let Some(work_dir) = &self.work_dir {
             command.current_dir(work_dir);
         }
-        if let Some(log_file) = &self.log_file {
-            let file = File::create(log_file)?;
-            command.stdout(unsafe { Stdio::from_raw_fd(file.as_raw_fd()) });
-            command.stderr(unsafe { Stdio::from_raw_fd(file.as_raw_fd()) });
-            *self.file.write().unwrap() = Some(file);
+        if let Some(log_file) = &self.log_file_out {
+            command.stdout(Stdio::from(File::create(log_file)?));
+        }
+        if let Some(log_file) = &self.log_file_err {
+            command.stderr(Stdio::from(File::create(log_file)?));
         }
         Ok(command)
-    }
-
-    pub fn file_close(&self) {
-        *self.file.write().unwrap() = None;
     }
 
     pub fn run_sync(&self, noexec: bool) -> Result<(), Error> {
@@ -105,7 +105,6 @@ impl CommandToRun {
         }
         let mut command = self.prepare()?;
         let output = command.output()?;
-        self.file_close();
         io::stdout().write_all(&output.stdout)?;
         io::stderr().write_all(&output.stderr)
     }
