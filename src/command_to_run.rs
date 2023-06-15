@@ -71,7 +71,10 @@ impl CommandToRun {
             Some(f) => Some(CommandToRun::build_file_path(&f, &work_dir)?),
             None => None
         };
-        let parameters: Vec<String> = parts.iter().skip(1).map(|s|s.clone()).collect();
+        let mut parameters: Vec<String> = Vec::new();
+        for part in parts.iter().skip(1) {
+            parameters.push(CommandToRun::build_file_path(part, &work_dir)?);
+        }
         Ok(CommandToRun {
             command: name,
             parameters,

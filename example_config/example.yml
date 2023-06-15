@@ -28,16 +28,19 @@ services:
         workdir: ~/projects/kafka/bin
         command: $PWD/zookeeper.sh
         log_file: $PWD/logs/zookeeper.log
+        log_file_err: $PWD/logs/zookeeper_err.log
       kafka:
         wait_for_ports: [2181]
         workdir: ~/projects/kafka/bin
         command: $WD/kafka-server-start.sh ../config/server.properties
         log_file: $PWD/logs/kafka.log
+        log_file_err: $PWD/logs/kafka_err.log
       topic-create:
         wait_for_ports: [9092]
         workdir: ~/projects/kafka/bin
         command: $PWD/topic_create.sh
         log_file: $PWD/logs/topic_create.log
+        log_file_err: $PWD/logs/topic_create_err.log
 
   postgres:
     disabled: false
@@ -46,10 +49,12 @@ services:
       postgres:
         command: $PWD/postgres.sh
         log_file: $PWD/logs/postgres.log
+        log_file_err: $PWD/logs/postgres_err.log
       db-create:
         wait_for_ports: [5432]
         command: database_init postgres db_name changelogs_folder db_user db_password
         log_file: $PWD/logs/db_create.log
+        log_file_err: $PWD/logs/db_create_err.log
 
   redis:
     disabled: false
@@ -57,6 +62,7 @@ services:
       redis:
         command: redis-server --save --appendonly no
         log_file: $PWD/logs/redis.log
+        log_file_err: $PWD/logs/redis_err.log
 
   server:
     disabled: false
@@ -68,6 +74,7 @@ services:
         env_file: $PWD/.env
         command: $WD/bin/some-service
         log_file: $PWD/logs/server.log
+        log_file_err: $PWD/logs/server_err.log
 
   graphql:
     disabled: false
@@ -77,6 +84,7 @@ services:
         env_file: $PWD/.gqlenv
         command: $WD/bin/some-graphql-service
         log_file: $PWD/logs/graphql.log
+        log_file_err: $PWD/logs/graphql_err.log
 
   mock-services:
     disabled: false
@@ -85,6 +93,7 @@ services:
         workdir: some_work_dir
         command: $WD/bin/mock-services
         log_file: $PWD/logs/mock-services.log
+        log_file_err: $PWD/logs/mock-services_err.log
 
   stubs:
     disabled: false
@@ -93,3 +102,4 @@ services:
         workdir: some_work_dir
         command: $WD/bin/stubs
         log_file: $PWD/logs/stubs.log
+        log_file_err: $PWD/logs/stubs_err.log
