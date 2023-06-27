@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::{env, io};
@@ -14,7 +14,7 @@ pub struct CommandToRun {
     log_file_out: Option<String>,
     log_file_err: Option<String>,
     work_dir: Option<String>,
-    env_variables: HashMap<String, String>,
+    env_file: Option<String>,
 }
 
 fn format_vector(vector: &Vec<String>) -> String {
@@ -24,23 +24,15 @@ fn format_vector(vector: &Vec<String>) -> String {
     "[\"".to_string() + vector.join("\",\"").as_str() + "\"]"
 }
 
-fn format_map(map: &HashMap<String, String>) -> String {
-    if map.is_empty() {
-        return "[]".to_string();
-    }
-    let vector: Vec<String> = map.iter().map(|(k, v)| k.clone() + ":" + v).collect();
-    "\n[".to_string() + vector.join("\n").as_str() + "]"
-}
-
 impl Display for CommandToRun {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandToRun {} parameters={} log_file_out={} log_file_err={} work_dir={} env_variables={}",
+        write!(f, "CommandToRun {} parameters={} log_file_out={} log_file_err={} work_dir={} env_file={}",
                self.command,
                format_vector(&self.parameters),
                if self.log_file_out.is_none() { "None" } else { self.log_file_out.as_ref().unwrap().as_str() },
                if self.log_file_err.is_none() { "None" } else { self.log_file_err.as_ref().unwrap().as_str() },
                if self.work_dir.is_none() { "None" } else { self.work_dir.as_ref().unwrap().as_str() },
-               format_map(&self.env_variables))
+               if self.env_file.is_none() { "None" } else { self.env_file.as_ref().unwrap().as_str() })
     }
 }
 
@@ -54,13 +46,9 @@ impl CommandToRun {
             Some(wd) => Some(CommandToRun::build_file_path(&wd, &None)?),
             None => None
         };
-        let env_variables = match env_file {
-            Some(f) => parse_env_file(CommandToRun::build_file_path(&f, &work_dir)?)?,
-            None => HashMap::new()
-        };
         let parts: Vec<String> = split_string(command, HashSet::from(['"']))?
             .iter()
-            .map(|p|p.result.clone())
+            .map(|p| p.result.clone())
             .collect();
         let name = CommandToRun::build_file_path(&parts[0], &work_dir)?;
         let log_file_out = match logfile_out {
@@ -81,14 +69,17 @@ impl CommandToRun {
             log_file_out,
             log_file_err,
             work_dir,
-            env_variables,
+            env_file,
         })
     }
 
     fn prepare(&self) -> Result<Command, Error> {
         let mut command = Command::new(&self.command);
-        command.args(&self.parameters)
-            .envs(&self.env_variables);
+        command.args(&self.parameters);
+        if let Some(f) = &self.env_file {
+            let env_variables = parse_env_file(CommandToRun::build_file_path(&f, &self.work_dir)?)?;
+            command.envs(&env_variables);
+        }
         if let Some(work_dir) = &self.work_dir {
             command.current_dir(work_dir);
         }
