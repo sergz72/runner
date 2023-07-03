@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
+use std::thread;
+use std::time::Duration;
 use yaml_rust::Yaml;
 use crate::command_to_run::CommandToRun;
-use crate::script::{Script, SCRIPT_STATUS_NOT_STARTED, ScriptChecker};
+use crate::script::{Script, SCRIPT_STATUS_NOT_STARTED, SCRIPT_STATUS_RUNNING, SCRIPT_STATUS_STARTING, ScriptChecker};
 use crate::user_command::WriterWithTCP;
 use crate::utilities::build_invalid_data_error_string;
 
@@ -64,6 +66,12 @@ impl Service {
             script.stop(writer)?;
         }
         if let Some(script) = &self.post_stop_script {
+            let d = Duration::from_millis(100);
+            writer.write_string("Waiting for scripts to be interrupted...".to_string());
+            while self.scripts.values()
+                .any(|s|s.get_status() == SCRIPT_STATUS_STARTING || s.get_status() == SCRIPT_STATUS_RUNNING) {
+                thread::sleep(d);
+            }
             writer.write_string(format!("Running post-stop-script for {}", self.name));
             script.run_sync(noexec)?;
             writer.write_string(format!("Finished post-stop-script for {}", self.name));
