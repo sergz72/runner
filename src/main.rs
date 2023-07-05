@@ -64,7 +64,9 @@ fn main() -> Result<(), Error> {
         unsafe {
             MANAGER = Some(manager);
 
-            run_user_commands(commands, MANAGER.as_ref().unwrap(), noexec, WriterWithTCP::new(None));
+            if commands.len() > 0 {
+                run_user_commands(commands, MANAGER.as_ref().unwrap(), noexec, WriterWithTCP::new(None));
+            }
 
             if noexec {
                 ctrlc::set_handler(|| {shutdown(true, WriterWithTCP::new(None))})
