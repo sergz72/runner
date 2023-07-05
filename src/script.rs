@@ -46,15 +46,19 @@ fn process_host_port(host_port: &str, name: &String) -> Result<(String, u16), Er
             format!("more than one : in wait_for_ports in script {}", name)))
     };
     if let Ok(p) = isize::from_str(port) {
-        if p <= 0 || p > 65535 {
-            Err(build_invalid_data_error_string(
-                format!("port value is out of range is invalid in script {}", name)))
-        } else {
-            Ok((host.to_string(), p as u16))
-        }
+        process_port(host.to_string(), p as i64, name)
     } else {
         Err(build_invalid_data_error_string(
             format!("port number is invalid in wait_for_ports in script {}", name)))
+    }
+}
+
+fn process_port(host: String, port: i64, name: &String) -> Result<(String, u16), Error> {
+    if port <= 0 || port > 65535 {
+        Err(build_invalid_data_error_string(
+            format!("port value is out of range is invalid in script {}", name)))
+    } else {
+        Ok((host, port as u16))
     }
 }
 
@@ -75,8 +79,12 @@ impl Script {
                 if let Some(host_port) = port_yaml.as_str() {
                     wait_for_ports.insert(process_host_port(host_port, &name)?);
                 } else {
-                    return Err(build_invalid_data_error_string(
-                        format!("wait_for_ports is invalid in script {}", name)));
+                    if let Some(port) = port_yaml.as_i64() {
+                        wait_for_ports.insert(process_port("localhost".to_string(), port, &name)?);
+                    } else {
+                        return Err(build_invalid_data_error_string(
+                            format!("wait_for_ports is invalid in script {}", name)));
+                    }
                 }
             }
         }
