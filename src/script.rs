@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::io::{Error, ErrorKind};
 use std::net::TcpStream;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::sync::Mutex;
@@ -22,18 +23,39 @@ pub const SCRIPT_STATUS_KILLED: usize = 6;
 
 pub trait ScriptChecker {
     fn script_exists(&self, script_name: &String) -> bool;
-    fn get_script_status(&self, script_name: &String) -> usize;
+    fn check_scripts(&self, scripts: &HashSet<String>) -> bool;
 }
 
 pub struct Script {
     name: String,
     command: CommandToRun,
-    wait_for_ports: HashSet<u16>,
+    wait_for_ports: HashSet<(String, u16)>,
     wait_until_scripts_are_done: HashSet<String>,
     delay: Option<Duration>,
     status: AtomicUsize,
     tx: Mutex<Sender<()>>,
     rx: Mutex<Receiver<()>>,
+}
+
+fn process_host_port(host_port: &str, name: &String) -> Result<(String, u16), Error> {
+    let splitted: Vec<&str> = host_port.split(':').collect();
+    let (host, port) = match splitted.len()  {
+        1 => ("localhost", splitted[0]),
+        2 => (splitted[0], splitted[1]),
+        _ => return Err(build_invalid_data_error_string(
+            format!("more than one : in wait_for_ports in script {}", name)))
+    };
+    if let Ok(p) = isize::from_str(port) {
+        if p <= 0 || p > 65535 {
+            Err(build_invalid_data_error_string(
+                format!("port value is out of range is invalid in script {}", name)))
+        } else {
+            Ok((host.to_string(), p as u16))
+        }
+    } else {
+        Err(build_invalid_data_error_string(
+            format!("port number is invalid in wait_for_ports in script {}", name)))
+    }
 }
 
 impl Script {
@@ -50,18 +72,12 @@ impl Script {
         let mut wait_for_ports = HashSet::new();
         if let Some(wait_ports) = items["wait_for_ports"].as_vec() {
             for port_yaml in wait_ports {
-                let port = match port_yaml.as_i64() {
-                    Some(p) => {
-                        if p <= 0 || p > 65535 {
-                            return Err(build_invalid_data_error_string(
-                                format!("port value is out of range is invalid in script {}", name)));
-                        }
-                        p as u16
-                    }
-                    None => return Err(build_invalid_data_error_string(
-                        format!("wait_for_ports is invalid in script {}", name)))
-                };
-                wait_for_ports.insert(port);
+                if let Some(host_port) = port_yaml.as_str() {
+                    wait_for_ports.insert(process_host_port(host_port, &name)?);
+                } else {
+                    return Err(build_invalid_data_error_string(
+                        format!("wait_for_ports is invalid in script {}", name)));
+                }
             }
         }
         let wait_until_scripts_are_done = items["wait_until_scripts_are_done"].as_vec()
@@ -199,9 +215,7 @@ impl Script {
 
     fn wait_for_scripts(&self, scripts: &HashSet<String>, checker: &dyn ScriptChecker) -> bool {
         let duration = Duration::from_secs(1);
-        while !scripts.iter()
-            .map(|s| checker.get_script_status(s))
-            .all(|s| s == SCRIPT_STATUS_FINISHED) {
+        while !checker.check_scripts(scripts) {
             if !self.wait(duration) {
                 return false;
             }
@@ -224,9 +238,9 @@ impl Script {
         true
     }
 
-    fn wait_for_ports(&self, ports: &HashSet<u16>) -> bool {
+    fn wait_for_ports(&self, ports: &HashSet<(String, u16)>) -> bool {
         let duration = Duration::from_secs(1);
-        while !ports.iter().all(|port| TcpStream::connect(("localhost", *port)).is_ok()) {
+        while !ports.iter().all(|(host, port)| TcpStream::connect((host.as_str(), *port)).is_ok()) {
             if !self.wait(duration) {
                 return false;
             }
@@ -257,5 +271,29 @@ impl Script {
             }
             sleep(delay);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::script::process_host_port;
+
+    fn check_host_port(host: &str, port: u16, input: &str, name: &String) {
+        let result = process_host_port(&input.to_string(), name);
+        assert!(result.is_ok());
+        let (h, p) = result.unwrap();
+        assert_eq!(h.as_str(), host);
+        assert_eq!(p, port);
+    }
+
+    #[test]
+    fn test_process_host_port() {
+        let name = "test".to_string();
+        check_host_port("localhost", 1234, "1234", &name);
+        check_host_port("server", 1234, "server:1234", &name);
+        assert!(process_host_port(&"aaaa", &name).is_err());
+        assert!(process_host_port(&"123456", &name).is_err());
+        assert!(process_host_port(&"aaaa:123456", &name).is_err());
+        assert!(process_host_port(&"aaaa:1234:", &name).is_err());
     }
 }

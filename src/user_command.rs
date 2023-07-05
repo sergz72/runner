@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::process::exit;
@@ -34,47 +35,64 @@ impl WriterWithTCP {
     }
 }
 
-pub fn run_user_command(command: String, manager: &'static ServiceManager, noexec: bool, writer: &mut WriterWithTCP)
+pub fn run_user_command(parts: Vec<String>, manager: &'static ServiceManager, noexec: bool, writer: &mut WriterWithTCP)
     -> Result<(), Error> {
-    writer.write_string(format!("Running command {}", command));
-    if command.is_empty() {
+    writer.write_string(format!("Running command {:?}", parts));
+    if parts.is_empty() {
         return Err(Error::new(ErrorKind::InvalidInput, "empty command"));
     }
-    let parts: Vec<&str> = command.split(&[' ', '_']).collect();
-    return match parts[0] {
+    return match parts[0].as_str() {
         "up" => if parts.len() == 2 {
-            manager.up(parts[1], noexec, writer)
+            manager.up(&parts[1], noexec, writer)
         } else { Err(build_invalid_command_error()) },
         "down" => if parts.len() == 1 {
             manager.shutdown(noexec, writer)
         } else { Err(build_invalid_command_error()) },
-        "start" => if parts.len() == 2 {
-            if parts[1].contains('.') {
-                manager.start_script(false, parts[1], noexec, writer)
-            } else {
-                manager.start_service(false, parts[1], noexec, writer)
+        "start" => if parts.len() >= 2 {
+            for i in 1..parts.len() {
+                if parts[i].contains('.') {
+                    manager.start_script(false, &parts[i], noexec, writer)?;
+                } else {
+                    manager.start_service(false, &parts[i], noexec, writer)?;
+                }
             }
+            Ok(())
         } else { Err(build_invalid_command_error()) },
-        "force-start" => if parts.len() == 2 {
-            if parts[1].contains('.') {
-                manager.start_script(true, parts[1], noexec, writer)
-            } else {
-                manager.start_service(true, parts[1], noexec, writer)
+        "force-start" => if parts.len() >= 2 {
+            for i in 1..parts.len() {
+                if parts[i].contains('.') {
+                    manager.start_script(true, &parts[i], noexec, writer)?;
+                } else {
+                    manager.start_service(true, &parts[i], noexec, writer)?;
+                }
             }
+            Ok(())
         } else { Err(build_invalid_command_error()) },
-        "stop" => if parts.len() == 2 {
-            if parts[1].contains('.') {
-                manager.stop_script(parts[1], writer)
-            } else {
-                manager.stop_service(parts[1], noexec, writer)
+        "stop" => if parts.len() >= 2 {
+            for i in 1..parts.len() {
+                if parts[i].contains('.') {
+                    manager.stop_script(&parts[i], writer)?;
+                } else {
+                    manager.stop_service(&parts[i], noexec, writer)?;
+                }
             }
+            Ok(())
         } else { Err(build_invalid_command_error()) },
         "status" => if parts.len() == 1 {
             writer.write_string(manager.report_status(None));
             Ok(())
-        } else if parts.len() == 2 {
-            writer.write_string(manager.report_status(Some(parts[1])));
+        } else {
+            for i in 1..parts.len() {
+                writer.write_string(manager.report_status(Some(&parts[i])));
+            }
             Ok(())
+        },
+        "wait_for_scripts" => if parts.len() >= 2 {
+            let scripts: HashSet<String> = parts.iter()
+                .skip(1)
+                .map(|s|s.clone())
+                .collect::<HashSet<_>>();
+            manager.wait_for_scripts(&scripts)
         } else { Err(build_invalid_command_error()) },
         "exit" => {
             let _ = manager.shutdown(noexec, writer);
@@ -89,10 +107,7 @@ fn build_invalid_command_error() -> Error {
 }
 
 pub fn run_user_commands(commands: Vec<String>, manager: &'static ServiceManager, noexec: bool, mut writer: WriterWithTCP) {
-    for command in commands {
-        if let Err(e) = run_user_command(command, manager, noexec, &mut writer) {
-            let _ = writer.write_string(format!("{}", e));
-            return;
-        }
+    if let Err(e) = run_user_command(commands, manager, noexec, &mut writer) {
+        let _ = writer.write_string(format!("{}", e));
     }
 }

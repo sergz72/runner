@@ -25,7 +25,8 @@ fn run_command(manager: &'static ServiceManager, noexec: bool, mut writer: Write
                 return;
             }
             if let Ok(command) = String::from_utf8(Vec::from(&buffer[0..amt])) {
-                if let Err(e) = run_user_command(command, manager, noexec, &mut writer) {
+                let parts = command.split(' ').map(|s|s.to_string()).collect();
+                if let Err(e) = run_user_command(parts, manager, noexec, &mut writer) {
                     let _ = writer.write_string(format!("{}", e));
                 }
             } else {

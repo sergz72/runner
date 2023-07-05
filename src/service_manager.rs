@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{Error, ErrorKind};
+use std::thread;
+use std::time::Duration;
 use yaml_rust::yaml::Hash;
 use crate::command_to_run::CommandToRun;
-use crate::script::{SCRIPT_STATUS_NOT_STARTED, ScriptChecker};
+use crate::script::{SCRIPT_STATUS_FINISHED, SCRIPT_STATUS_NOT_STARTED, ScriptChecker};
 use crate::service::{build_invalid_script_name_error, Service};
 use crate::user_command::WriterWithTCP;
 use crate::utilities::{build_invalid_data_error_str, build_invalid_data_error_string};
@@ -26,11 +28,10 @@ impl ScriptChecker for Services {
         false
     }
 
-    fn get_script_status(&self, script_name: &String) -> usize {
-        if let Ok((service, script_real_name)) = self.get_script_service(script_name) {
-            return service.get_script_status(&script_real_name);
-        }
-        SCRIPT_STATUS_NOT_STARTED
+    fn check_scripts(&self, scripts: &HashSet<String>) -> bool {
+        scripts.iter()
+            .map(|s| self.get_script_status(s))
+            .all(|s| s == SCRIPT_STATUS_FINISHED)
     }
 }
 
@@ -49,29 +50,36 @@ impl Services {
         Ok(result)
     }
 
-    fn find_service(&self, service_name: &str) -> Result<&Service, Error> {
+    fn get_script_status(&self, script_name: &String) -> usize {
+        if let Ok((service, script_real_name)) = self.get_script_service(script_name) {
+            return service.get_script_status(&script_real_name);
+        }
+        SCRIPT_STATUS_NOT_STARTED
+    }
+
+    fn find_service(&self, service_name: &String) -> Result<&Service, Error> {
         self.services.get(service_name)
             .map_or_else(||Err(Error::new(ErrorKind::InvalidInput, "service not found")),|s|Ok(s))
     }
 
-    pub fn start_service(&'static self, forced_start: bool, service_name: &str, noexec: bool,
+    pub fn start_service(&'static self, forced_start: bool, service_name: &String, noexec: bool,
                          writer: &mut WriterWithTCP) -> Result<(), Error> {
         let service = self.find_service(service_name)?;
         service.start(forced_start, self, noexec, writer)
     }
 
-    pub fn start_script(&'static self, forced_start: bool, script_name: &str, noexec: bool,
+    pub fn start_script(&'static self, forced_start: bool, script_name: &String, noexec: bool,
                         writer: &mut WriterWithTCP) -> Result<(), Error> {
         let (service, script_name) = self.get_script_service(script_name)?;
         service.start_script(&script_name, forced_start, self, noexec, writer)
     }
 
-    pub fn stop_script(&self, script_name: &str, writer: &mut WriterWithTCP) -> Result<(), Error> {
+    pub fn stop_script(&self, script_name: &String, writer: &mut WriterWithTCP) -> Result<(), Error> {
         let (service, script_name) = self.get_script_service(script_name)?;
         service.stop_script(&script_name, writer)
     }
 
-    pub fn stop_service(&self, service_name: &str, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
+    pub fn stop_service(&self, service_name: &String, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
         let service = self.find_service(service_name)?;
         service.stop(noexec, writer)
     }
@@ -97,7 +105,7 @@ impl Services {
         Ok(())
     }
 
-    pub fn get_script_service(&self, script_name: &str) -> Result<(&Service, String), Error> {
+    pub fn get_script_service(&self, script_name: &String) -> Result<(&Service, String), Error> {
         let parts: Vec<&str> = script_name.split('.').collect();
         if parts.len() != 2 {
             return Err(build_invalid_script_name_error());
@@ -113,9 +121,9 @@ impl Services {
         Err(build_invalid_data_error_string(format!("service does not exists: {}", name)))
     }
 
-    pub fn report_status(&self, service_name: Option<&str>) -> String {
+    pub fn report_status(&self, service_name: Option<&String>) -> String {
         self.services.iter()
-            .filter(|(name, _service)|service_name == None || service_name.unwrap() == (**name))
+            .filter(|(name, _service)|service_name == None || service_name.unwrap() == *name)
             .map(|(name, service)|name.clone() + ":\n" + service.get_status_string().as_str())
             .collect::<Vec<_>>()
             .join("\n")
@@ -170,7 +178,7 @@ impl ServiceManager {
         Ok(())
     }
 
-    pub fn up(&'static self, service_set_name: &str, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
+    pub fn up(&'static self, service_set_name: &String, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
         let services = self.service_sets.get(service_set_name)
             .ok_or(Error::new(ErrorKind::InvalidInput, "invalid service set name"))?;
         self.services.start_all(services, noexec, writer)
@@ -180,26 +188,39 @@ impl ServiceManager {
         self.services.stop_all(noexec, writer)
     }
 
-    pub fn start_service(&'static self, forced_start: bool, service_name: &str, noexec: bool,
+    pub fn start_service(&'static self, forced_start: bool, service_name: &String, noexec: bool,
                          writer: &mut WriterWithTCP) -> Result<(), Error> {
         self.services.start_service(forced_start, service_name, noexec, writer)
     }
 
-    pub fn stop_service(&self, service_name: &str, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
+    pub fn stop_service(&self, service_name: &String, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
         self.services.stop_service(service_name, noexec, writer)
     }
 
-    pub fn start_script(&'static self, forced_start: bool, script_name: &str, noexec: bool,
+    pub fn start_script(&'static self, forced_start: bool, script_name: &String, noexec: bool,
                         writer: &mut WriterWithTCP) -> Result<(), Error> {
         self.services.start_script(forced_start, script_name, noexec, writer)
     }
 
-    pub fn stop_script(&self, script_name: &str, writer: &mut WriterWithTCP) -> Result<(), Error> {
+    pub fn stop_script(&self, script_name: &String, writer: &mut WriterWithTCP) -> Result<(), Error> {
         self.services.stop_script(script_name, writer)
     }
 
-    pub fn report_status(&self, service_name: Option<&str>) -> String {
+    pub fn report_status(&self, service_name: Option<&String>) -> String {
         self.services.report_status(service_name)
+    }
+
+    pub fn wait_for_scripts(&self, scripts: &HashSet<String>) -> Result<(), Error> {
+        for script in scripts {
+            if !self.services.script_exists(script) {
+                return Err(Error::new(ErrorKind::InvalidInput, format!("Script does not exist: {}", script)));
+            }
+        }
+        let duration = Duration::from_secs(1);
+        while !self.services.check_scripts(scripts) {
+            thread::sleep(duration);
+        }
+        Ok(())
     }
 }
 
