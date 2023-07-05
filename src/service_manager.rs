@@ -160,9 +160,9 @@ impl ServiceManager {
 
     pub fn shutdown(&self, noexec: bool, writer: &mut WriterWithTCP) -> Result<(), Error> {
         self.stop_all(noexec, writer)?;
+        writer.write_string(format!("Waiting for all services to be finished..."));
+        self.services.wait_finish();
         if let Some(cmd) = &self.shutdown_command {
-            writer.write_string(format!("Waiting for all services to be finished..."));
-            self.services.wait_finish();
             writer.write_string(format!("Starting shutdown script..."));
             cmd.run_sync(noexec)?;
             writer.write_string(format!("Finished shutdown script..."));
