@@ -8,8 +8,9 @@ mod utilities;
 
 use std::fs;
 use std::env::args;
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 use std::process::exit;
+use std::str::FromStr;
 use yaml_rust::YamlLoader;
 use ctrlc;
 use crate::server::{send_command_to_server, server_start};
@@ -23,18 +24,37 @@ fn usage() {
     println!("Usage: runner [config_file_name] [commands]")
 }
 
+fn parse_port(port: &String) -> Result<isize, Error> {
+    if let Ok(p) = isize::from_str(port) {
+        if p <= 0 || p > 65535 {
+            Err(Error::new(ErrorKind::InvalidInput, "port value is out of range"))
+        } else {
+            Ok(p)
+        }
+    } else {
+        Err(Error::new(ErrorKind::InvalidInput, "port number is invalid"))
+    }
+}
+
 fn main() -> Result<(), Error> {
     let mut config_file = None;
     let mut commands = Vec::new();
     let mut n = 0;
     let mut noinit = false;
     let mut noexec = false;
+    let mut nextport = false;
+    let mut port = 65000;
     for arg in args() {
-        if n != 0 {
+        if nextport {
+            nextport = false;
+            port = parse_port(&arg)?;
+        } else if n != 0 {
             if arg == "noinit" {
                 noinit = true;
             } else if arg == "noexec" {
                 noexec = true;
+            } else if arg == "port" {
+                nextport = true;
             } else if n == 1 && arg.ends_with(".yml") {
                 config_file = Some(arg);
             } else {
@@ -74,10 +94,10 @@ fn main() -> Result<(), Error> {
                 ctrlc::set_handler(|| {shutdown(false, WriterWithTCP::new(None))})
             }.map_err(|e|build_invalid_data_error_string(e.to_string()))?;
 
-            return server_start(MANAGER.as_ref().unwrap(), noexec);
+            return server_start(port as u16, MANAGER.as_ref().unwrap(), noexec);
         }
     }
-    send_command_to_server(commands.join(" "))
+    send_command_to_server(port as u16, commands.join(" "))
 }
 
 fn shutdown(noexec: bool, mut writer: WriterWithTCP) {

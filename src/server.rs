@@ -3,11 +3,9 @@ use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use crate::service_manager::ServiceManager;
 use crate::user_command::{run_user_command, WriterWithTCP};
 
-const PORT: u16 = 65000;
-
-pub fn server_start(manager: &'static ServiceManager, noexec: bool) -> Result<(), Error> {
-    let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], PORT)))?;
-    println!("Server listening on port {}", PORT);
+pub fn server_start(port: u16, manager: &'static ServiceManager, noexec: bool) -> Result<(), Error> {
+    let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port)))?;
+    println!("Server listening on port {}", port);
     for stream in listener.incoming() {
         match stream {
             Ok(s) => run_command(manager, noexec, WriterWithTCP::new(Some(s))),
@@ -39,11 +37,11 @@ fn run_command(manager: &'static ServiceManager, noexec: bool, mut writer: Write
     writer.shutdown();
 }
 
-pub fn send_command_to_server(command: String) -> Result<(), Error> {
+pub fn send_command_to_server(port: u16, command: String) -> Result<(), Error> {
     let mut buffer = [0; 10000];
     println!("Sending command {} to server...", command);
     let mut stream = TcpStream::connect(
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), PORT))?;
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port))?;
     stream.write_all(command.as_bytes())?;
     loop {
         match stream.read(&mut buffer) {
