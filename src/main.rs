@@ -63,7 +63,7 @@ fn main() -> Result<(), Error> {
         }
         n += 1;
     }
-    if config_file.is_none() && commands.len() == 0 {
+    if nextport || (config_file.is_none() && commands.len() == 0) {
         usage();
         return Ok(());
     }
